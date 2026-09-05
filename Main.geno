@@ -1,0 +1,27 @@
+/// Main.geno — capability-free entry + optional CLI with caps.
+/// ============================================================
+
+import Cli
+
+/// Default entry: run the demo script and return the statement String.
+@untested("entry point — capability-free demo")
+func main() -> String
+    match Cli.run(["demo"]) with
+    | Ok(out) -> return out
+    | Err(e) -> return e
+    end match
+end func
+
+/// Optional real CLI: needs --unsafe --cap env,print (see README).
+@untested("requires --unsafe --cap env,print")
+func cli_main() -> Int
+    let args: List[String] = cli_args()
+    match Cli.run(args) with
+    | Ok(out) ->
+        print(out)
+        return 0
+    | Err(e) ->
+        print(e)
+        return 1
+    end match
+end func

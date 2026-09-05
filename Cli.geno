@@ -1,0 +1,96 @@
+/// Cli.geno — argv-style driver (capability-free run(args)).
+/// =========================================================
+
+import Money
+import Tx
+import Ledger
+
+@untested("static usage text")
+func usage() -> String
+    return "usage: demo | format <cents> | balance | apply | dollars <amount>"
+end func
+
+/// Demo balances snapshot after the standard script (no statement txs list needed).
+func demo_balance_report(run: Bool) -> Result[String, String]
+    example true -> Ok("cash: $7.50\nchecking: $6.50")
+    example false -> Ok("cash: $7.50\nchecking: $6.50")
+    let txs: List[Tx] = [
+        Deposit("cash", 1000),
+        Deposit("checking", 500),
+        Transfer("cash", "checking", 250),
+        Withdraw("checking", 100)
+    ]
+    match Ledger.apply_all([], txs) with
+    | Err(e) -> return Err(e)
+    | Ok(bals) ->
+        var lines: List[String] = []
+        var i: Int = 0
+        while i < length(bals) do
+            lines = append(lines, Ledger.format_balance_line(bals[i]))
+            i = i + 1
+        end while
+        return Ok(join(lines, "\n"))
+    end match
+end func
+
+/// Apply the demo script and return a full statement.
+func demo_apply_report(run: Bool) -> Result[String, String]
+    example true -> Ok("deposit cash +$10.00\ndeposit checking +$5.00\ntransfer cash -> checking $2.50\nwithdraw checking -$1.00\n---\ncash: $7.50\nchecking: $6.50")
+    example false -> Ok("deposit cash +$10.00\ndeposit checking +$5.00\ntransfer cash -> checking $2.50\nwithdraw checking -$1.00\n---\ncash: $7.50\nchecking: $6.50")
+    return Ledger.demo_ledger(true)
+end func
+
+/// Subcommands: demo | format <cents> | balance | apply | dollars <amount>
+func run(args: List[String]) -> Result[String, String]
+    example ["demo"] -> Ok("deposit cash +$10.00\ndeposit checking +$5.00\ntransfer cash -> checking $2.50\nwithdraw checking -$1.00\n---\ncash: $7.50\nchecking: $6.50")
+    example ["format", "1234"] -> Ok("$12.34")
+    example ["format", "-50"] -> Ok("-$0.50")
+    example ["format"] -> Err("usage: format <cents>")
+    example ["format", "x"] -> Err("not an integer: x")
+    example ["balance"] -> Ok("cash: $7.50\nchecking: $6.50")
+    example ["apply"] -> Ok("deposit cash +$10.00\ndeposit checking +$5.00\ntransfer cash -> checking $2.50\nwithdraw checking -$1.00\n---\ncash: $7.50\nchecking: $6.50")
+    example ["dollars", "12.34"] -> Ok("1234")
+    example ["dollars", "1.5"] -> Err("cents part must be exactly 2 digits")
+    example [] -> Err("usage: demo | format <cents> | balance | apply | dollars <amount>")
+    example ["nope"] -> Err("usage: demo | format <cents> | balance | apply | dollars <amount>")
+
+    if length(args) == 0 then
+        return Err(usage())
+    end if
+
+    let cmd: String = args[0]
+
+    if cmd == "demo" then
+        return Ledger.demo_ledger(true)
+    end if
+
+    if cmd == "format" then
+        if length(args) < 2 then
+            return Err("usage: format <cents>")
+        end if
+        match Money.parse_cents_arg(args[1]) with
+        | Err(e) -> return Err(e)
+        | Ok(cents) -> return Ok(Money.format_cents(cents))
+        end match
+    end if
+
+    if cmd == "balance" then
+        return demo_balance_report(true)
+    end if
+
+    if cmd == "apply" then
+        return demo_apply_report(true)
+    end if
+
+    if cmd == "dollars" then
+        if length(args) < 2 then
+            return Err("usage: dollars <amount>")
+        end if
+        match Money.parse_dollars(args[1]) with
+        | Err(e) -> return Err(e)
+        | Ok(cents) -> return Ok(to_string(cents))
+        end match
+    end if
+
+    return Err(usage())
+end func

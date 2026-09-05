@@ -1,0 +1,38 @@
+/// Account.geno — account identity (id + display name).
+/// =====================================================
+
+type Account = Account(id: String, name: String)
+
+/// Open an account; rejects empty id or name.
+func open_account(id: String, name: String) -> Result[Account, String]
+    example "cash", "Cash" -> Ok(Account("cash", "Cash"))
+    example "checking", "Checking" -> Ok(Account("checking", "Checking"))
+    example "", "Cash" -> Err("account id must be non-empty")
+    example "cash", "" -> Err("account name must be non-empty")
+    if length(id) == 0 then
+        return Err("account id must be non-empty")
+    end if
+    if length(name) == 0 then
+        return Err("account name must be non-empty")
+    end if
+    return Ok(Account(id, name))
+end func
+
+func account_id(acct: Account) -> String
+    example Account("cash", "Cash") -> "cash"
+    example Account("a", "A") -> "a"
+    return acct.id
+end func
+
+func account_name(acct: Account) -> String
+    example Account("cash", "Cash") -> "Cash"
+    example Account("a", "A") -> "A"
+    return acct.name
+end func
+
+/// Human-readable label: "Cash (cash)".
+func account_label(acct: Account) -> String
+    example Account("cash", "Cash") -> "Cash (cash)"
+    example Account("checking", "Checking") -> "Checking (checking)"
+    return acct.name + " (" + acct.id + ")"
+end func

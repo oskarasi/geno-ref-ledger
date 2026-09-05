@@ -1,0 +1,12 @@
+name = "geno-ref-ledger"
+version = "0.1.0"
+entrypoint = "Main"
+targets = ["python-cli", "node-cli"]
+files = [
+    "Money.geno",
+    "Account.geno",
+    "Tx.geno",
+    "Ledger.geno",
+    "Cli.geno",
+    "Main.geno",
+]

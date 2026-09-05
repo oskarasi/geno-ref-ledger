@@ -1,0 +1,97 @@
+/// Tx.geno — ledger transaction variants and validation.
+/// ======================================================
+
+import Money
+
+/// Deposit / Withdraw / Transfer — amounts are integer cents.
+type Tx = Deposit(account_id: String, amount_cents: Int) | Withdraw(account_id: String, amount_cents: Int) | Transfer(from_id: String, to_id: String, amount_cents: Int)
+
+/// Reject zero amounts and empty / identical transfer endpoints.
+/// No `requires` here: Err examples would conflict (#73 workaround).
+func validate_tx(tx: Tx) -> Result[Tx, String]
+    example Deposit("cash", 100) -> Ok(Deposit("cash", 100))
+    example Deposit("cash", 0) -> Err("amount must be non-zero")
+    example Withdraw("cash", 50) -> Ok(Withdraw("cash", 50))
+    example Withdraw("cash", 0) -> Err("amount must be non-zero")
+    example Transfer("cash", "checking", 25) -> Ok(Transfer("cash", "checking", 25))
+    example Transfer("cash", "checking", 0) -> Err("amount must be non-zero")
+    example Transfer("", "checking", 10) -> Err("from_id must be non-empty")
+    example Transfer("cash", "", 10) -> Err("to_id must be non-empty")
+    example Transfer("cash", "cash", 10) -> Err("transfer endpoints must differ")
+    example Deposit("", 10) -> Err("account_id must be non-empty")
+    example Withdraw("", 10) -> Err("account_id must be non-empty")
+    match tx with
+    | Deposit(account_id, amount_cents) ->
+        if length(account_id) == 0 then
+            return Err("account_id must be non-empty")
+        end if
+        if amount_cents == 0 then
+            return Err("amount must be non-zero")
+        else
+            return Ok(tx)
+        end if
+    | Withdraw(account_id, amount_cents) ->
+        if length(account_id) == 0 then
+            return Err("account_id must be non-empty")
+        end if
+        if amount_cents == 0 then
+            return Err("amount must be non-zero")
+        else
+            return Ok(tx)
+        end if
+    | Transfer(from_id, to_id, amount_cents) ->
+        if length(from_id) == 0 then
+            return Err("from_id must be non-empty")
+        end if
+        if length(to_id) == 0 then
+            return Err("to_id must be non-empty")
+        end if
+        if from_id == to_id then
+            return Err("transfer endpoints must differ")
+        end if
+        if amount_cents == 0 then
+            return Err("amount must be non-zero")
+        else
+            return Ok(tx)
+        end if
+    end match
+end func
+
+/// Absolute magnitude of the transaction amount (always positive cents).
+func tx_amount_abs(tx: Tx) -> Int
+    example Deposit("a", 100) -> 100
+    example Deposit("a", (-100)) -> 100
+    example Withdraw("a", 50) -> 50
+    example Transfer("a", "b", 25) -> 25
+    match tx with
+    | Deposit(account_id, amount_cents) -> return Money.abs_int(amount_cents)
+    | Withdraw(account_id, amount_cents) -> return Money.abs_int(amount_cents)
+    | Transfer(from_id, to_id, amount_cents) -> return Money.abs_int(amount_cents)
+    end match
+end func
+
+func tx_kind(tx: Tx) -> String
+    example Deposit("a", 1) -> "deposit"
+    example Withdraw("a", 1) -> "withdraw"
+    example Transfer("a", "b", 1) -> "transfer"
+    match tx with
+    | Deposit(account_id, amount_cents) -> return "deposit"
+    | Withdraw(account_id, amount_cents) -> return "withdraw"
+    | Transfer(from_id, to_id, amount_cents) -> return "transfer"
+    end match
+end func
+
+/// One-line description for statements.
+func describe_tx(tx: Tx) -> String
+    example Deposit("cash", 100) -> "deposit cash +$1.00"
+    example Withdraw("cash", 50) -> "withdraw cash -$0.50"
+    example Transfer("cash", "checking", 25) -> "transfer cash -> checking $0.25"
+    match tx with
+    | Deposit(account_id, amount_cents) ->
+        return "deposit " + account_id + " +" + Money.format_cents(Money.abs_int(amount_cents))
+    | Withdraw(account_id, amount_cents) ->
+        return "withdraw " + account_id + " -" + Money.format_cents(Money.abs_int(amount_cents))
+    | Transfer(from_id, to_id, amount_cents) ->
+        return "transfer " + from_id + " -> " + to_id + " " + Money.format_cents(Money.abs_int(amount_cents))
+    end match
+end func

@@ -1,0 +1,186 @@
+/// Ledger.geno — balances as a list of pairs + apply / statement helpers.
+/// =======================================================================
+
+import Money
+import Account
+import Tx
+
+/// Balance row: account id paired with cents.
+type BalPair = BalPair(account_id: String, cents: Int)
+
+@untested("empty list constant")
+func empty_balances() -> List[BalPair]
+    return []
+end func
+
+/// Look up balance; missing accounts are treated as 0.
+func get_balance(balances: List[BalPair], account_id: String) -> Int
+    example [BalPair("cash", 100), BalPair("checking", 50)], "cash" -> 100
+    example [BalPair("cash", 100), BalPair("checking", 50)], "checking" -> 50
+    example [BalPair("cash", 100)], "missing" -> 0
+    example [], "cash" -> 0
+    var i: Int = 0
+    while i < length(balances) do
+        let pair: BalPair = balances[i]
+        if pair.account_id == account_id then
+            return pair.cents
+        end if
+        i = i + 1
+    end while
+    return 0
+end func
+
+/// Upsert a balance row (immutable list rebuild).
+func set_balance(balances: List[BalPair], account_id: String, cents: Int) -> List[BalPair]
+    example [], "cash", 100 -> [BalPair("cash", 100)]
+    example [BalPair("cash", 50)], "cash", 100 -> [BalPair("cash", 100)]
+    example [BalPair("cash", 50)], "checking", 25 -> [BalPair("cash", 50), BalPair("checking", 25)]
+    var i: Int = 0
+    var found: Bool = false
+    var out: List[BalPair] = []
+    while i < length(balances) do
+        let pair: BalPair = balances[i]
+        if pair.account_id == account_id then
+            out = append(out, BalPair(account_id, cents))
+            found = true
+        else
+            out = append(out, pair)
+        end if
+        i = i + 1
+    end while
+    if found then
+        return out
+    else
+        return append(out, BalPair(account_id, cents))
+    end if
+end func
+
+/// Credit (add) cents to an account.
+func credit(balances: List[BalPair], account_id: String, amount_cents: Int) -> List[BalPair]
+    requires amount_cents >= 0
+    example [], "cash", 100 -> [BalPair("cash", 100)]
+    example [BalPair("cash", 50)], "cash", 25 -> [BalPair("cash", 75)]
+    let cur: Int = get_balance(balances, account_id)
+    return set_balance(balances: balances, account_id: account_id, cents: cur + amount_cents)
+end func
+
+/// Debit (subtract) cents; fails on insufficient funds.
+func debit(balances: List[BalPair], account_id: String, amount_cents: Int) -> Result[List[BalPair], String]
+    example [BalPair("cash", 100)], "cash", 40 -> Ok([BalPair("cash", 60)])
+    example [BalPair("cash", 100)], "cash", 100 -> Ok([BalPair("cash", 0)])
+    example [BalPair("cash", 50)], "cash", 60 -> Err("insufficient funds: cash")
+    example [], "cash", 1 -> Err("insufficient funds: cash")
+    let cur: Int = get_balance(balances, account_id)
+    if cur < amount_cents then
+        return Err("insufficient funds: " + account_id)
+    end if
+    return Ok(set_balance(balances: balances, account_id: account_id, cents: cur - amount_cents))
+end func
+
+/// Apply one validated transaction to the balances map.
+func apply_tx(balances: List[BalPair], tx: Tx) -> Result[List[BalPair], String]
+    example [], Deposit("cash", 100) -> Ok([BalPair("cash", 100)])
+    example [BalPair("cash", 100)], Withdraw("cash", 40) -> Ok([BalPair("cash", 60)])
+    example [BalPair("cash", 100)], Withdraw("cash", 150) -> Err("insufficient funds: cash")
+    example [BalPair("cash", 100)], Transfer("cash", "checking", 30) -> Ok([BalPair("cash", 70), BalPair("checking", 30)])
+    example [], Deposit("cash", 0) -> Err("amount must be non-zero")
+    match Tx.validate_tx(tx) with
+    | Err(e) -> return Err(e)
+    | Ok(ok_tx) ->
+        match ok_tx with
+        | Deposit(account_id, amount_cents) ->
+            let amt: Int = Money.abs_int(amount_cents)
+            return Ok(credit(balances: balances, account_id: account_id, amount_cents: amt))
+        | Withdraw(account_id, amount_cents) ->
+            let amt: Int = Money.abs_int(amount_cents)
+            return debit(balances: balances, account_id: account_id, amount_cents: amt)
+        | Transfer(from_id, to_id, amount_cents) ->
+            let amt: Int = Money.abs_int(amount_cents)
+            match debit(balances: balances, account_id: from_id, amount_cents: amt) with
+            | Err(e) -> return Err(e)
+            | Ok(after_debit) ->
+                return Ok(credit(balances: after_debit, account_id: to_id, amount_cents: amt))
+            end match
+        end match
+    end match
+end func
+
+/// Fold a list of transactions left-to-right.
+func apply_all(balances: List[BalPair], txs: List[Tx]) -> Result[List[BalPair], String]
+    example [], [Deposit("cash", 100), Deposit("checking", 50)] -> Ok([BalPair("cash", 100), BalPair("checking", 50)])
+    example [], [Deposit("cash", 100), Withdraw("cash", 40), Transfer("cash", "checking", 10)] -> Ok([BalPair("cash", 50), BalPair("checking", 10)])
+    example [], [Withdraw("cash", 1)] -> Err("insufficient funds: cash")
+    example [], [] -> Ok([])
+    var i: Int = 0
+    var cur: List[BalPair] = balances
+    while i < length(txs) do
+        match apply_tx(cur, txs[i]) with
+        | Err(e) -> return Err(e)
+        | Ok(next) ->
+            cur = next
+        end match
+        i = i + 1
+    end while
+    return Ok(cur)
+end func
+
+/// Format one balance line: "cash: $1.00".
+func format_balance_line(pair: BalPair) -> String
+    example BalPair("cash", 100) -> "cash: $1.00"
+    example BalPair("checking", 5) -> "checking: $0.05"
+    return pair.account_id + ": " + Money.format_cents(pair.cents)
+end func
+
+/// Statement lines: each tx description, then a blank separator, then balances.
+func statement_lines(balances: List[BalPair], txs: List[Tx]) -> List[String]
+    example [BalPair("cash", 60)], [Deposit("cash", 100), Withdraw("cash", 40)] -> ["deposit cash +$1.00", "withdraw cash -$0.40", "---", "cash: $0.60"]
+    example [], [] -> ["---"]
+    var lines: List[String] = []
+    var i: Int = 0
+    while i < length(txs) do
+        lines = append(lines, Tx.describe_tx(txs[i]))
+        i = i + 1
+    end while
+    lines = append(lines, "---")
+    var j: Int = 0
+    while j < length(balances) do
+        lines = append(lines, format_balance_line(balances[j]))
+        j = j + 1
+    end while
+    return lines
+end func
+
+func format_statement(balances: List[BalPair], txs: List[Tx]) -> String
+    example [BalPair("cash", 100)], [Deposit("cash", 100)] -> "deposit cash +$1.00\n---\ncash: $1.00"
+    example [], [] -> "---"
+    return join(statement_lines(balances, txs), "\n")
+end func
+
+/// Seed ledger with opened accounts at zero, then apply txs.
+/// Hardcoded demo script (cash/checking). Bool flag unused; enables example clauses.
+func demo_ledger(run: Bool) -> Result[String, String]
+    example true -> Ok("deposit cash +$10.00\ndeposit checking +$5.00\ntransfer cash -> checking $2.50\nwithdraw checking -$1.00\n---\ncash: $7.50\nchecking: $6.50")
+    example false -> Ok("deposit cash +$10.00\ndeposit checking +$5.00\ntransfer cash -> checking $2.50\nwithdraw checking -$1.00\n---\ncash: $7.50\nchecking: $6.50")
+    match Account.open_account(id: "cash", name: "Cash") with
+    | Err(e) -> return Err(e)
+    | Ok(cash) ->
+        match Account.open_account(id: "checking", name: "Checking") with
+        | Err(e) -> return Err(e)
+        | Ok(checking) ->
+            let start: List[BalPair] = [
+                BalPair(Account.account_id(cash), 0),
+                BalPair(Account.account_id(checking), 0)
+            ]
+            let txs: List[Tx] = [
+                Deposit("cash", 1000),
+                Deposit("checking", 500),
+                Transfer("cash", "checking", 250),
+                Withdraw("checking", 100)
+            ]
+            match apply_all(start, txs) with
+            | Err(e) -> return Err(e)
+            | Ok(bals) -> return Ok(format_statement(balances: bals, txs: txs))
+            end match
+        end match
+    end match
+end func
