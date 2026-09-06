@@ -60,6 +60,7 @@ func credit(balances: List[BalPair], account_id: String, amount_cents: Int) -> L
     requires amount_cents >= 0
     example [], "cash", 100 -> [BalPair("cash", 100)]
     example [BalPair("cash", 50)], "cash", 25 -> [BalPair("cash", 75)]
+    example [BalPair("cash", 50)], "cash", 0 -> [BalPair("cash", 50)]
     let cur: Int = get_balance(balances, account_id)
     return set_balance(balances: balances, account_id: account_id, cents: cur + amount_cents)
 end func
@@ -83,6 +84,7 @@ func apply_tx(balances: List[BalPair], tx: Tx) -> Result[List[BalPair], String]
     example [BalPair("cash", 100)], Withdraw("cash", 40) -> Ok([BalPair("cash", 60)])
     example [BalPair("cash", 100)], Withdraw("cash", 150) -> Err("insufficient funds: cash")
     example [BalPair("cash", 100)], Transfer("cash", "checking", 30) -> Ok([BalPair("cash", 70), BalPair("checking", 30)])
+    example [BalPair("cash", 10)], Transfer("cash", "checking", 30) -> Err("insufficient funds: cash")
     example [], Deposit("cash", 0) -> Err("amount must be non-zero")
     match Tx.validate_tx(tx) with
     | Err(e) -> return Err(e)
@@ -128,6 +130,7 @@ end func
 func format_balance_line(pair: BalPair) -> String
     example BalPair("cash", 100) -> "cash: $1.00"
     example BalPair("checking", 5) -> "checking: $0.05"
+    example BalPair("cash", (-50)) -> "cash: -$0.50"
     return pair.account_id + ": " + Money.format_cents(pair.cents)
 end func
 
@@ -152,6 +155,7 @@ end func
 
 func format_statement(balances: List[BalPair], txs: List[Tx]) -> String
     example [BalPair("cash", 100)], [Deposit("cash", 100)] -> "deposit cash +$1.00\n---\ncash: $1.00"
+    example [BalPair("cash", 70), BalPair("checking", 30)], [Deposit("cash", 100), Transfer("cash", "checking", 30)] -> "deposit cash +$1.00\ntransfer cash -> checking $0.30\n---\ncash: $0.70\nchecking: $0.30"
     example [], [] -> "---"
     return join(statement_lines(balances, txs), "\n")
 end func

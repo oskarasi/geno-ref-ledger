@@ -21,12 +21,14 @@ end func
 func account_id(acct: Account) -> String
     example Account("cash", "Cash") -> "cash"
     example Account("a", "A") -> "a"
+    example Account("savings", "Savings") -> "savings"
     return acct.id
 end func
 
 func account_name(acct: Account) -> String
     example Account("cash", "Cash") -> "Cash"
     example Account("a", "A") -> "A"
+    example Account("savings", "Savings") -> "Savings"
     return acct.name
 end func
 
@@ -34,5 +36,6 @@ end func
 func account_label(acct: Account) -> String
     example Account("cash", "Cash") -> "Cash (cash)"
     example Account("checking", "Checking") -> "Checking (checking)"
+    example Account("savings", "High-Yield") -> "High-Yield (savings)"
     return acct.name + " (" + acct.id + ")"
 end func

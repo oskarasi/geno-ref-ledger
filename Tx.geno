@@ -84,6 +84,7 @@ end func
 /// One-line description for statements.
 func describe_tx(tx: Tx) -> String
     example Deposit("cash", 100) -> "deposit cash +$1.00"
+    example Deposit("cash", 1234) -> "deposit cash +$12.34"
     example Withdraw("cash", 50) -> "withdraw cash -$0.50"
     example Transfer("cash", "checking", 25) -> "transfer cash -> checking $0.25"
     match tx with

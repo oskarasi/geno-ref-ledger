@@ -57,6 +57,10 @@ both Python and JS.
 | **Cli** | `run(args)` subcommands |
 | **Main** | capability-free `main`; optional `cli_main` |
 
+**Module dependency order** (bottom-up): `Money` → `Account` → `Tx` (imports Money) →
+`Ledger` (Money, Account, Tx) → `Cli` (Money, Tx, Ledger) → `Main` (Cli).
+Sibling imports are explicit (`import Money`); `geno.toml` `files` lists every module.
+
 ## API overview
 
 ```text
@@ -89,6 +93,11 @@ Subcommands:
 ## Test / run
 
 ```bash
+# preferred on this box:
+/workspace/geno-venv/bin/geno test .
+/workspace/geno-venv/bin/geno run .
+/workspace/geno-venv/bin/geno check .
+# or if geno 0.4.3 is on PATH:
 geno test .
 geno run .
 geno check .
@@ -109,13 +118,15 @@ checking: $6.50
 ## Compile to Python / JS
 
 ```bash
-geno compile -o /tmp/ledger.py .
-geno compile --target js -o /tmp/ledger.js .
+GENO=/workspace/geno-venv/bin/geno   # or: geno
+$GENO compile -o /tmp/ledger.py .
+$GENO compile --target js -o /tmp/ledger.js .
 # optional profile (node-cli is also listed in geno.toml targets)
-geno compile --target js --profile node-cli -o /tmp/ledger-node.js .
+$GENO compile --target js --profile node-cli -o /tmp/ledger-node.js .
 ```
 
-Verified on Geno **0.4.3**: both Python and JS compiles succeed for this project.
+Verified on Geno **0.4.3** (`/workspace/geno-venv/bin/geno`): both Python and JS
+compiles succeed for this project.
 
 `geno.toml` targets: `python-cli`, `node-cli` (both accepted by `geno check`).
 
@@ -139,14 +150,15 @@ geno run --unsafe --cap env,print .
 
 ```text
 geno-ref-ledger/
-  geno.toml
-  Money.geno
-  Account.geno
-  Tx.geno
-  Ledger.geno
-  Cli.geno
-  Main.geno
+  geno.toml          # version 0.1.0; files + python-cli/node-cli targets
+  Money.geno         # cents format / parse
+  Account.geno       # Account record + open/label
+  Tx.geno            # Deposit | Withdraw | Transfer
+  Ledger.geno        # BalPair balances, apply, statements
+  Cli.geno           # run(args) subcommands
+  Main.geno          # capability-free main + optional cli_main
   README.md
+  CHANGELOG.md       # 0.1.0 release notes
   LICENSE
 ```
 

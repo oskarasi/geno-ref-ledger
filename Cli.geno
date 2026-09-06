@@ -51,6 +51,8 @@ func run(args: List[String]) -> Result[String, String]
     example ["apply"] -> Ok("deposit cash +$10.00\ndeposit checking +$5.00\ntransfer cash -> checking $2.50\nwithdraw checking -$1.00\n---\ncash: $7.50\nchecking: $6.50")
     example ["dollars", "12.34"] -> Ok("1234")
     example ["dollars", "1.5"] -> Err("cents part must be exactly 2 digits")
+    example ["dollars"] -> Err("usage: dollars <amount>")
+    example ["format", "10099"] -> Ok("$100.99")
     example [] -> Err("usage: demo | format <cents> | balance | apply | dollars <amount>")
     example ["nope"] -> Err("usage: demo | format <cents> | balance | apply | dollars <amount>")
 
